@@ -27,14 +27,14 @@ repo is its backup home. This directory is a nested git checkout of this repo.
 
 ## Workflow
 
-Captures are made by `packages/ranges/scripts/fetch_browser.py` in the main
-repo (CDP walk of the logged-in debug Chrome; the app itself signs every
-request). Solutions are static, so captures are reused from this archive
-instead of re-fetched. After new captures:
+Captures are made by `scripts/fetch_browser.py` in this repo (CDP walk of
+the logged-in debug Chrome; the app itself signs every request). Solutions
+are static, so captures are reused from this archive instead of re-fetched.
+After new captures:
 
 ```
 git add -A && git commit -m "<what was scraped>" && git push
 ```
 
-The store (`packages/ranges/data/` in the main repo) converts these into the
-app's range library via `gw_to_store.py`.
+`gw_to_store.py` converts these into the store (`packages/ranges/data/` in
+the main repo, two levels up), which feeds the app's range library.
