@@ -30,12 +30,12 @@ flop history) — multiway lines and longer boards file naturally, and
 unnamed node types die loudly instead of being misfiled.
 
 Usage (repo root):
-  python3 packages/ranges/imports/scripts/fetch_browser.py --catalog
-  python3 packages/ranges/imports/scripts/fetch_browser.py --rfi BTN --depth 30
-  python3 packages/ranges/imports/scripts/fetch_browser.py --bb-vs UTG --depth 40
-  python3 packages/ranges/imports/scripts/fetch_browser.py --rfi UTG --board Kh8h3c --cbet
-  python3 packages/ranges/imports/scripts/fetch_browser.py --stacks 40.125-35.125-... --rfi UTG
-  python3 packages/ranges/imports/scripts/fetch_browser.py --history-spot 9 \
+  python3 straddle-solutions/scripts/fetch_browser.py --catalog
+  python3 straddle-solutions/scripts/fetch_browser.py --rfi BTN --depth 30
+  python3 straddle-solutions/scripts/fetch_browser.py --bb-vs UTG --depth 40
+  python3 straddle-solutions/scripts/fetch_browser.py --rfi UTG --board Kh8h3c --cbet
+  python3 straddle-solutions/scripts/fetch_browser.py --stacks 40.125-35.125-... --rfi UTG
+  python3 straddle-solutions/scripts/fetch_browser.py --history-spot 9 \
       --preflop-actions R2-F-F-F-F-F-F-C --board Kh8h3c      # manual mode
 """
 
@@ -52,7 +52,7 @@ import urllib.request
 import websocket
 
 CDP = "http://localhost:9222"
-IMPORTS = pathlib.Path(__file__).resolve().parent.parent
+IMPORTS = pathlib.Path(__file__).resolve().parents[1]
 SOLUTIONS = IMPORTS / "solutions"
 CATALOG = IMPORTS / "catalog.json"
 APP = "https://app.gtowizard.com/solutions"

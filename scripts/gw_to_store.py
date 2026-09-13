@@ -2,9 +2,9 @@
 """Convert fetched GTO Wizard spot-solutions (see fetch_browser.py) into the
 range store's combo-line format.
 
-  python3 packages/ranges/imports/scripts/gw_to_store.py flop .scratch/k83-fetched.json
+  python3 straddle-solutions/scripts/gw_to_store.py flop .scratch/k83-fetched.json
       --parent utg/rfi.json --stack 40
-  python3 packages/ranges/imports/scripts/gw_to_store.py preflop .scratch/utg40-fetched.json
+  python3 straddle-solutions/scripts/gw_to_store.py preflop .scratch/utg40-fetched.json
 
 Flop responses are per-combo (1326, gw_order.combo_order); preflop responses
 are per-class (169, gw_order.class_order — class values are copied to every
@@ -22,9 +22,9 @@ import sys
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from gw_order import combo_order, class_order, class_of, combos_of_class
 
-# scripts live in imports/ (the nested solutions repo); the store is
-# in the main repo at packages/ranges/data — two levels up from here
-STORE = pathlib.Path(__file__).resolve().parents[2] / "data"
+# scripts live in the straddle-solutions submodule at the repo root;
+# the store is in the main repo at packages/ranges/data — two levels up
+STORE = pathlib.Path(__file__).resolve().parents[2] / "packages/ranges/data"
 MIN_FREQ = 0.00005
 
 

@@ -3,7 +3,7 @@
 Raw GTO Wizard solution archives backing the [straddle](https://github.com/JulienDanh/straddle)
 poker study app. **Licensed data — this repo must stay private.**
 
-The main app repo gitignores this directory (`packages/ranges/imports/`); this
+The main app repo gitignores this directory (`straddle-solutions/`); this
 repo is its backup home. This directory is a nested git checkout of this repo.
 
 ## Transcripts and extracts

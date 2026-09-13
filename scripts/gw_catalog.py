@@ -2,7 +2,7 @@
 """Query the cached GTO Wizard solutions library (imports/catalog.json).
 
 Reads the local capture only — it never touches the network. To refresh the
-catalog: python3 packages/ranges/imports/scripts/fetch_browser.py --catalog
+catalog: python3 straddle-solutions/scripts/fetch_browser.py --catalog
 
 Usage:
   gw_catalog.py gametypes [pattern]     list gametypes (name, players, configs)
@@ -15,13 +15,13 @@ import json
 import pathlib
 import sys
 
-CATALOG = pathlib.Path(__file__).resolve().parent.parent / "catalog.json"
+CATALOG = pathlib.Path(__file__).resolve().parents[1] / "catalog.json"
 
 
 def load():
     if not CATALOG.exists():
         sys.exit("no cached catalog — run: "
-                 "python3 packages/ranges/imports/scripts/fetch_browser.py --catalog")
+                 "python3 straddle-solutions/scripts/fetch_browser.py --catalog")
     return json.loads(CATALOG.read_text())["gametypes"]
 
 
