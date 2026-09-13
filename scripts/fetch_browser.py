@@ -8,7 +8,7 @@ responses off the wire. Nothing here ever calls api.gtowizard.com directly.
 
 Awareness: every fetch is validated against the solutions library catalog
 (the app's own /v4/game-modes/ response, captured on page load and cached at
-imports/catalog.json) — gametype, depth and the exact stack config must
+catalog.json at the repo root) — gametype, depth and the exact stack config must
 exist, because for nonexistent spots the app silently falls back to an
 unrelated solution. Walk modes derive lines from real node responses, so
 open sizes (R2 vs R2.1) are never guessed:
@@ -52,9 +52,9 @@ import urllib.request
 import websocket
 
 CDP = "http://localhost:9222"
-IMPORTS = pathlib.Path(__file__).resolve().parents[1]
-SOLUTIONS = IMPORTS / "solutions"
-CATALOG = IMPORTS / "catalog.json"
+ROOT = pathlib.Path(__file__).resolve().parents[1]
+SOLUTIONS = ROOT / "solutions"
+CATALOG = ROOT / "catalog.json"
 APP = "https://app.gtowizard.com/solutions"
 WIZARD = (APP + "?solution_type=gwiz&soltab=range&gmfs_solution_tab=ai_sols"
           "&gametype={gametype}&depth={depth}&stacks={stacks}"

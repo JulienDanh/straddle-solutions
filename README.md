@@ -31,8 +31,8 @@ from here and writes the extracts here too.
 - `catalog.json` — cached solutions-library catalog (1,101 gametypes with
   their exact depth/stack configs), used to validate fetches before
   navigating
-- `*.txt` / `*-fetched.json` / `*-converted.json` — earliest raw range-view
-  pastes from the manual import era, kept for provenance
+- `imports/` — raw range-view pastes from the manual import era, kept for
+  provenance
 
 ## Workflow
 
