@@ -1,0 +1,109 @@
+---
+system: S5
+title: Barreling Medium Strength Hands
+type: hand-strength
+course: No-Limit Systems
+scenario: Hero has a medium-strength hand on the turn. Should we barrel or check?
+source_files:
+  - transcripts/Simple Poker Systems/Simple_Poker_Systems_07_System_5_Barreling_Medium_Strength_Hands_in_Error.txt
+stack_depth: 25-80bb
+street: turn
+---
+
+# System 5 — Barreling Medium Strength Hands
+
+## Overview
+Hero c-bets the flop, gets called, and faces a turn decision with a medium-strength hand. Core principle: betting ranges should be dense with really strong hands and really weak hands — void of the middle. Medium-strength hands check.
+
+## Buckets
+- **Pyramid top (nuts)**: Bet for value — get called by hands below
+- **Pyramid bottom (air)**: Bet as bluffs — pressure hands just above
+- **Pyramid middle (medium strength)**: Check — no business betting. Gets called by better, folds worse.
+
+## Decision Rules
+- **Default: check medium-strength hands on the turn.** If you c-bet the flop and get called, the turn is where you polarize.
+- Bet the top: sets, two pair, strong top pair, overpairs, strong draws
+- Bet the bottom: trash hands with no showdown value
+- Check the middle: second pair, top pair no kicker, underpairs, medium ace-high
+- **Exception — merge bets**: When villain's range is capped (checked back flop), a medium-strength hand can bet as a merge — getting folds from slightly better hands AND calls from worse hands simultaneously
+- **Exception — range advantage**: When the turn card dramatically favors your range (e.g. ace on board when you have overpairs), medium-strength hands can barrel more
+
+## Risk Factors
+| Factor | Effect |
+|--------|--------|
+| Deeper stacks | Villain check-calls stronger hands (KQ, QJ) — your medium hand is thinner |
+| Earlier position | Villain has stronger range — more top pair for check-calling |
+| Turn card improves villain's range | Check more — bad card for you means barrel less |
+| Villain checked back the flop | Their range is capped — merge betting becomes viable |
+| Shorter stacks | Less check-raising from villain — medium hands can bet more |
+
+## Sizing
+- Default: polar — bet big (pot) or check. Simplify to one bet size in position.
+- Solver often wants 116% pot (overbet) or check — simplification to pot-sized bet or check is fine
+- Small bet sizes (60%) can add thinner value hands (like K8s) but medium hands (99, 88) still don't qualify
+
+## Common Leaks
+- Barreling medium-strength hands for "protection" — they get called by better and fold worse
+- Not recognizing when a hand is medium-strength: J9 on Q73 is jack-X no kicker = medium
+- Overestimating the value of a pair — pocket nines on K72 is medium, not a value bet
+- Missing merge opportunities when villain is capped
+
+## Hand Examples
+- **J9 on Q73 → J turn (CO, 80bb)**: Medium strength (Jx no kicker). Villain check-calls KQ, QJ at depth. Check. Solver: KJ checks, J9 checks, only AJ barrels (strongest jack).
+- **99 on K72 → Q turn (50bb)**: Medium strength (beats high cards, loses to Kx). Check. Solver: 99 and 88 don't bet even with small sizing added. Bet KK (overpair), bet A3s (bluff), bet T8s (bluff).
+- **JTo on K72 → Q turn (25bb)**: Medium strength. Shorter stack = less Kx in villain's range (more check-raises). But still Jx no kicker — check. AJ can barrel (stronger jack).
+- **JJ on Q75r → 8 turn (CO, 50bb)**: Medium strength. Bad turn for hero (improves villain's connected hands). Check. Solver: 56% check. With donk bet stripped out, 72% check. Pocket 88 (open-ender) CAN barrel — 99 and JJ cannot.
+- **ATo on Q73 → J turn (merge bet, 50bb)**: Exception — merge bet. Villain checked back flop (capped). AT gets folds from KX/QX (better) and calls from J10/J4s/10Xd (worse). Both bluff and value simultaneously.
+
+## Heuristics
+- "Bet top, bet bottom, check middle"
+- "The pyramid: nuts at top, bluffs at bottom, nothing in between"
+- "If you can't check-raise it, heavily consider betting it" (for strong hands that can't CR)
+- "Medium hands have no business betting — called by better, fold worse"
+- "Merge = bet that's simultaneously a bluff and a value bet"
+
+## Quiz Spots
+- Hand: 99 on K72 → Q turn → Check (medium pair, not polar enough)
+- Hand: J9 on Q73 → J turn → Check (Jx no kicker, villain has KJ/QJ)
+- Hand: 88 on Q75 → 8 turn → Bet (open-ender + pair = strong enough)
+- Hand: ATo on Q73, villain checked flop → J turn → Bet (merge — villain capped)
+
+## Rules Q&A
+- Q: What is the pyramid principle?
+  Options: [Betting ranges should be dense with strong hands and weak hands, void of medium, Bet everything, Check everything, Only bet the nuts]
+  Correct: 0
+  Explanation: Nuts bet for value (get called by worse). Bluffs bet to fold out better. Medium hands check — they accomplish nothing by betting.
+- Q: Why should pocket nines check the turn on K72?
+  Options: [It's a medium-strength hand — called by Kx, folds out air, It's a bluff, It's the nuts, It's too strong to check]
+  Correct: 0
+  Explanation: 99 beats high cards but loses to all pairs. Betting gets called by better (Kx) and folds worse (air). No business betting.
+- Q: What makes a merge bet work?
+  Options: [Villain is capped — you get folds from slightly better AND calls from worse, Villain is very strong, You have the nuts, The board is dry]
+  Correct: 0
+  Explanation: Merge bets work when villain's range is capped (e.g. checked back flop). Your medium hand folds out slightly better hands AND gets called by worse — both bluff and value simultaneously.
+- Q: What changes about check-calling ranges at deeper stacks?
+  Options: [Villain check-calls stronger hands — your medium hands become thinner, Villain check-calls weaker, Nothing changes, Villain check-raises more]
+  Correct: 0
+  Explanation: At 80bb, villain check-calls KQ, QJ. At 25bb, those hands check-raise. Deeper = stronger calling range = your medium hands are thinner.
+- Q: What's different about pocket eights vs pocket nines on Q75 → 8 turn?
+  Options: [Eights has an open-ender — much stronger hand, Eights is weaker so always bet, No difference, Nines is stronger so always bet]
+  Correct: 0
+  Explanation: 88 has an open-ended straight draw giving extra equity against ALL pairs. 99 only has a gutshot. The open-ender makes 88 a barrel while 99 checks.
+- Q: When the solver wants to overbet (116% pot) or check, what should a human do?
+  Options: [Simplify to pot-sized bet or check — close enough and easier to execute, Always overbet, Always check, Use 30% pot]
+  Correct: 0
+  Explanation: Human players simplify to pot-or-check. The EV loss from not overbetting is minimal and execution is far easier with one bet size.
+
+## Source Quotes
+- "betting ranges should be very dense, really strong hands and really weak hands, and generally speaking, should be void of a lot of the hands in the middle"
+- "if a hand in the middle bets, it's going to get called by the hands just above it... and it's going to get folds from the hands that are below it"
+- "the hands in the middle don't do much betting at all"
+- "this is traditionally called a merge play... a bet which serves both as a bluff and a value bet"
+- "pocket eights has an open ender... pocket jacks and pocket tens, very similar hands but without the open ender"
+- "deeper stacks plus earlier positions... this player is probably going to be check calling hands like queen ten and queen jack"
+
+## Cross-References
+- S1: UTG vs BB C-bet (the flop strategy that precedes this turn decision)
+- S2: BTN vs BB C-bet (the pyramid principle on checking flops)
+- S8: Bet Sizing In Position (when to bet bigger vs smaller on the turn)
+- S10: River Value Betting (relative hand strength on the river)

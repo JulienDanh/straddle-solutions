@@ -6,12 +6,14 @@ poker study app. **Licensed data — this repo must stay private.**
 The main app repo gitignores this directory (`packages/ranges/imports/`); this
 repo is its backup home. This directory is a nested git checkout of this repo.
 
-## Transcripts
+## Transcripts and extracts
 
-`transcripts/Simple Poker Systems/` and `transcripts/Bubble Mastery/` hold the
-source course transcripts (licensed training material). The public straddle
-repo converts them into the study guide but does not carry them; extraction
-reads them from here (`packages/ranges/imports/transcripts/` on disk).
+`transcripts/Simple Poker Systems/` and `transcripts/Bubble Mastery/` hold
+the source course transcripts (licensed training material); `extracted/`
+holds their structured .md extracts (28 files) and `flashcards.txt` the
+generated study deck. The public straddle repo renders the distilled study
+guide but carries none of this material; extraction reads the transcripts
+from here and writes the extracts here too.
 
 ## Layout
 
