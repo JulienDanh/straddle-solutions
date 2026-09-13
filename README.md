@@ -6,6 +6,13 @@ poker study app. **Licensed data — this repo must stay private.**
 The main app repo gitignores this directory (`packages/ranges/imports/`); this
 repo is its backup home. This directory is a nested git checkout of this repo.
 
+## Transcripts
+
+`transcripts/Simple Poker Systems/` and `transcripts/Bubble Mastery/` hold the
+source course transcripts (licensed training material). The public straddle
+repo converts them into the study guide but does not carry them; extraction
+reads them from here (`packages/ranges/imports/transcripts/` on disk).
+
 ## Layout
 
 - `solutions/<gametype>/<stacks>/<category>/<name>.json` — raw spot-solution
