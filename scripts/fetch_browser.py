@@ -15,6 +15,8 @@ open sizes (R2 vs R2.1) are never guessed:
 
   --rfi BTN                       BTN's RFI node
   --bb-vs BTN                     BTN RFI node, then BB's defend node
+  --rfi HJ --vs-3bet BB           HJ open, BB's defend node (real 3-bet size
+                                  read from it), then HJ's vs-3bet node
   ... --board Kh8h3c --cbet       continue to the opener's c-bet node
 
 Each capture prints the actions available at that node (exact bet sizes)
@@ -47,6 +49,7 @@ import random
 import re
 import sys
 import time
+import urllib.parse
 import urllib.request
 
 import websocket
@@ -56,6 +59,11 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 SOLUTIONS = ROOT / "solutions"
 CATALOG = ROOT / "catalog.json"
 APP = "https://app.gtowizard.com/solutions"
+# pacing: --pace P scales the in-app render pause to uniform(0.7P, 1.6P)
+# seconds (default without the flag: 0.5-1.5s, a quick human click). Bulk
+# sweeps must pass a larger --pace and add inter-request gaps in the driver
+# — a uniform, rapid cadence is the fingerprint of a scraper.
+PACE = None
 WIZARD = (APP + "?solution_type=gwiz&soltab=range&gmfs_solution_tab=ai_sols"
           "&gametype={gametype}&depth={depth}&stacks={stacks}"
           "&gmfft_sort_key=0&gmfft_sort_order=desc&history_spot={spot}"
@@ -162,8 +170,13 @@ def navigate_in_app(cdp, url, pause=None):
     expr = (f"history.pushState(null, '', {json.dumps(url)});"
             "window.dispatchEvent(new PopStateEvent('popstate'))")
     cdp.send("Runtime.evaluate", {"expression": expr})
-    # human pause while the app "renders" (near-zero with --fast)
-    time.sleep(pause if pause is not None else random.uniform(2.0, 6.0))
+    # human pause while the app "renders" — near-zero with --fast, scaled by
+    # --pace for bulk sweeps; events that arrive during the pause queue in
+    # the socket and are drained when capture_response starts listening
+    if PACE is not None:
+        time.sleep(random.uniform(PACE * 0.7, PACE * 1.6))
+    else:
+        time.sleep(pause if pause is not None else random.uniform(0.5, 1.5))
 
 
 # ---------------------------------------------------------------- catalog
@@ -249,13 +262,16 @@ def validate_spot(catalog, gametype, stacks):
 
 # ---------------------------------------------------------------- nodes
 
-def node_url(gametype, stacks, spot, preflop="", flop="", board=""):
-    # board stays as typed (Kh8h3c) — lowercase boards break app resolution
-    # and silently fall back to unrelated nodes (verified on 4-card boards)
+def node_url(gametype, stacks, spot, preflop="", flop="", board="",
+             turn="", river=""):
     url = WIZARD.format(gametype=gametype, depth=stacks[0], stacks="-".join(stacks),
                         spot=spot, preflop=preflop)
     if board:
         url += f"&flop_actions={flop or 'X'}&board={board}"
+        if turn:
+            url += f"&turn_actions={turn}"
+        if river:
+            url += f"&river_actions={river}"
     return url
 
 
@@ -269,25 +285,88 @@ def flop_node_spot(preflop, flop):
     return 1 + n_preflop + max(0, n_flop - 1)
 
 
-def capture_spot(cdp, url, fast=False, reload_first=False):
-    """Navigate to the spot in-app and capture the spot-solution response.
-    Falls back to a full page navigation if the router push doesn't fetch
-    (or reload_first=True to skip straight to it — a stale in-app state can
-    re-serve the wrong node on the push path). With fast=True the waits are
-    short (debugging); otherwise they are generous and human-paced."""
-    def matcher(u):
-        return "spot" if "solutions/spot-solution" in u else None
+def spot_params(url):
+    """The spot-identity params the app echoes into its spot-solution GET
+    (empirically: gametype, depth, stacks, the street action histories and
+    the board — no history_spot; the histories alone determine the node).
+    Missing params and empty strings both normalize to '', so a preflop
+    node URL (no flop params) matches the app's empty flop_actions= etc."""
+    q = urllib.parse.parse_qs(urllib.parse.urlparse(url).query)
 
-    push_wait, reload_wait = (8, 15) if fast else (45, 60)
+    def one(k):
+        return (q.get(k) or [""])[0]
+    return {k: one(k) for k in ("gametype", "depth", "stacks",
+                                "preflop_actions", "flop_actions",
+                                "turn_actions", "river_actions", "board")}
+
+
+def fmt_params(p):
+    return ", ".join(f"{k}={v}" for k, v in p.items() if v)
+
+
+def capture_spot(cdp, url, fast=False, reload_first=False):
+    """Navigate to the spot in-app and capture the spot-solution response —
+    matched EXACTLY against the request params the app sends. Returns
+    (body, None) on capture; (None, mismatched_params) when the app asked
+    for a different spot (the node URL doesn't resolve — fail fast, no
+    amount of reloading fixes that); (None, None) when no request fired at
+    all (stale in-memory state on the push path — a reload re-navigates).
+
+    The OPTIONS preflights carry the same URL, so only GET requests are
+    tracked. Waits are upper bounds — captures return when the response
+    lands (typically 1-3s)."""
+    want = spot_params(url)
+    state = {"pending": {}, "mismatch": None}
+
+    def on_event(msg):
+        m, params = msg.get("method"), msg.get("params", {})
+        rid = params.get("requestId")
+        if m == "Network.requestWillBeSent":
+            req = params.get("request", {})
+            if req.get("method") == "GET" and "solutions/spot-solution" in req.get("url", ""):
+                got = spot_params(req["url"])
+                if got == want:
+                    state["pending"][rid] = None
+                elif state["mismatch"] is None:
+                    state["mismatch"] = got
+                    # the app re-parameterized: this navigation will never
+                    # produce the requested spot — bail immediately
+                    return (None, got)
+        elif m == "Network.responseReceived":
+            if rid in state["pending"] and params.get("response", {}).get("status") == 200:
+                state["pending"][rid] = "ok"
+        elif m == "Network.loadingFinished":
+            if state["pending"].get(rid) == "ok":
+                result = cdp.wait_result(cdp.send(
+                    "Network.getResponseBody", {"requestId": rid}), 30)
+                body = result.get("result", {}).get("body")
+                if body:
+                    return (body, state["mismatch"])
+        return None
+
+    push_wait, reload_wait = (3, 10) if fast else (6, 25)
     if not reload_first:
-        navigate_in_app(cdp, url, pause=0.2 if fast else None)
-        got = capture_response(cdp, matcher, timeout=push_wait)
-        if got is not None:
-            return got
-        print("  no fetch on router push — reloading", file=sys.stderr)
+        navigate_in_app(cdp, url, pause=0.1 if fast else None)
+        try:
+            got = cdp.events(on_event, timeout=push_wait)
+        except Exception as e:
+            die(f"CDP connection error during capture ({e}) — is the debug "
+                "Chrome still open?")
+        return got if got is not None else (None, None)
     nav = cdp.send("Page.navigate", {"url": url})
     cdp.wait_result(nav)
-    return capture_response(cdp, matcher, timeout=reload_wait)
+    try:
+        got = cdp.events(on_event, timeout=reload_wait)
+    except Exception as e:
+        die(f"CDP connection error during capture ({e}) — is the debug "
+            "Chrome still open?")
+    return got if got is not None else (None, None)
+
+
+def app_location(cdp):
+    r = cdp.wait_result(cdp.send("Runtime.evaluate",
+                                 {"expression": "location.href"}), 10)
+    return r.get("result", {}).get("value", "")
 
 
 def check_capture(data, stacks, expected_position=None, expected_players=8,
@@ -328,47 +407,75 @@ def print_actions(data):
           f"{data['game']['board'] or 'preflop'}: " + " / ".join(parts))
 
 
-def open_code(data):
-    """The opener's actual open size, read from the captured RFI node."""
-    raises = [a["action"] for a in data["action_solutions"]
-              if a["action"]["type"] == "RAISE" and not a["action"]["allin"]]
-    if not raises:
-        die("no non-allin raise at the opener node — cannot walk past the open")
-    raises.sort(key=lambda r: float(r["betsize"]))
-    if len(raises) > 1:
-        print("  open sizes available: "
-              + ", ".join(f"{r['code']} ({r['betsize']}bb)" for r in raises)
-              + f" — using {raises[0]['code']}", file=sys.stderr)
-    return raises[0]["code"]
+def raise_code(data, what):
+    """The node's raise code, read from a captured response (sizes are never
+    guessed). Prefers the smallest non-all-in raise; falls back to the
+    all-in code (short-stack 3-bets can be shove-only); dies when the node
+    offers no raise at all."""
+    acts = [a["action"] for a in data["action_solutions"]]
+    raises = [a for a in acts if a["type"] == "RAISE" and not a["allin"]]
+    if raises:
+        raises.sort(key=lambda r: float(r["betsize"]))
+        if len(raises) > 1:
+            print(f"  {what} sizes available: "
+                  + ", ".join(f"{r['code']} ({r['betsize']}bb)" for r in raises)
+                  + f" — using {raises[0]['code']}", file=sys.stderr)
+        return raises[0]["code"]
+    allins = [a for a in acts if a["type"] == "RAISE" and a["allin"]]
+    if allins:
+        print(f"  {what} is all-in only at this node — using RAI", file=sys.stderr)
+        return allins[0]["code"]
+    die(f"no {what} at this node — cannot walk past it")
 
 
 def fetch_node(cdp, url, out, stacks, expected_position=None, expected_players=8,
                board="", reuse=False, fast=False):
     """Capture a node and archive it. With reuse=True, serve an already-
-    archived capture instead of re-fetching (solver spots are static)."""
+    archived capture instead of re-fetching (solver spots are static).
+
+    The capture is request-matched (capture_spot), so fallbacks and stale
+    state are detected in-flight; check_capture validates the response
+    itself as the last line of defense. Flow: router push (fast path),
+    full reload (stale in-memory state), die — no third retry."""
     if reuse and out.exists():
         data = json.loads(out.read_text())
         print(f"cached   -> {out.relative_to(SOLUTIONS)}")
         print_actions(data)
         return data
+
     for reload_first in (False, True):
-        got = capture_spot(cdp, url, fast=fast, reload_first=reload_first)
-        if got is None:
-            if reload_first:
-                die(f"no spot-solution response captured for {url}")
-            continue
-        data = json.loads(got[1])
-        error = check_capture(data, stacks, expected_position, expected_players, board)
-        if error is None:
+        body, mismatch = capture_spot(cdp, url, fast=fast, reload_first=reload_first)
+        if body is not None:
+            data = json.loads(body)
+            error = check_capture(data, stacks, expected_position,
+                                  expected_players, board)
+            if error:
+                die(error)  # the app asked for THIS spot — retrying won't change the answer
             out.parent.mkdir(parents=True, exist_ok=True)
             out.write_text(json.dumps(data, indent=2) + "\n")
             print(f"archived -> {out.relative_to(SOLUTIONS)}")
             print_actions(data)
             return data
-        if reload_first:
-            die(error)
-        print(f"  {error} — retrying with a full reload", file=sys.stderr)
-    die("unreachable")
+        if mismatch is not None:
+            if reload_first:
+                die(f"the app re-parameterized the spot even after a full "
+                    f"reload — it requested [{fmt_params(mismatch)}] instead "
+                    f"of [{fmt_params(spot_params(url))}]; the node doesn't "
+                    "resolve (bad line/spot encoding or unsupported spot)")
+            # a stale in-app state re-serves its own spot on the push —
+            # a fresh reload resolves it
+            print(f"  push requested a different spot "
+                  f"[{fmt_params(mismatch)}] — stale state, reloading",
+                  file=sys.stderr)
+        if not reload_first:
+            print("  no spot-solution request on the router push — reloading",
+                  file=sys.stderr)
+
+    loc = app_location(cdp)
+    where = f" (app is at {loc})" if loc else ""
+    die(f"no spot-solution response captured for {url}{where} — "
+        "if the app left the solutions page the session may have expired; "
+        "log in again in the debug Chrome window")
 
 
 # ---------------------------------------------------------------- archive
@@ -441,12 +548,26 @@ def manual_category(preflop, spot, board, flop_actions, players=8):
             threebettor = POSITIONS[k + 1 + raises[0]]
             return "vs-3bet", f"{slug(opener)}-{slug(threebettor)}", opener
     if board:
-        if not tokens or tokens[-1] != "C":
+        # limped lines end in BB's preflop check-vs-limp (the one preflop X
+        # the app codes): F-F-F-F-F-F-C-X — the SB limps (C), BB checks (X)
+        limped = (len(tokens) >= 2 and tokens[-1] == "X" and tokens[-2] == "C"
+                  and all(t == "F" for t in tokens[:-2]))
+        # caller-IP lines: opener raises, one seat calls, everyone else
+        # folds AFTER the call (blinds/BTN fold) — a 2-way pot where the
+        # caller has position: R2.1-F-F-F-C-F-F. The flop decider is the
+        # opener (OOP aggressor).
+        caller_ip = (k < len(tokens) and tokens[k].startswith("R")
+                     and tokens.count("C") == 1
+                     and all(t == "F" for t in tokens[k + 1:]
+                            if t != "C") and tokens[-1] == "F")
+        if not tokens or (tokens[-1] != "C" and not limped and not caller_ip):
             die("flop captures expect a preflop line ending in -C; a call "
                 "mid-line without one is a preflop overcall decision — needs "
                 "its own naming before scraping")
         flop = (flop_actions or "X").lower()
-        return "flops", f"{preflop.lower()}/{board.lower()}-{flop}", None
+        # caller-IP flops: validate the decider is the opener (OOP aggressor)
+        expected = POSITIONS[k] if caller_ip else None
+        return "flops", f"{preflop.lower()}/{board.lower()}-{flop}", expected
     if players != 8:
         die(f"preflop-node naming is 8-max only; {players}-max needs its own "
             "position names — add them before scraping")
@@ -489,12 +610,24 @@ def main():
     ap.add_argument("--bb-vs", choices=POSITIONS[:6], metavar="OPENER",
                     help="walk: fetch OPENER's RFI node, then BB's defend node "
                          "(open size is read from the RFI response)")
+    ap.add_argument("--defender", choices=POSITIONS, metavar="SEAT",
+                    help="with --rfi: fetch SEAT's defend node against the "
+                         "open (generalizes --bb-vs to any seat after the "
+                         "opener; the open code is read from the RFI response)")
+    ap.add_argument("--vs-3bet", choices=POSITIONS, metavar="VILLAIN",
+                    help="with --rfi: fetch VILLAIN's defend node (reading the "
+                         "real 3-bet size from it), then the opener's "
+                         "vs-3bet decision node")
     ap.add_argument("--board", default="", help="flop board, e.g. Kh8h3c")
     ap.add_argument("--cbet", action="store_true",
                     help="with --rfi/--bb-vs: continue to the flop c-bet node "
                          "(needs --board)")
     ap.add_argument("--flop-actions", default="X",
                     help="flop history code (X = node before any flop action)")
+    ap.add_argument("--turn-actions", default="",
+                    help="turn history code, street-split (e.g. X-R8.7-C)")
+    ap.add_argument("--river-actions", default="",
+                    help="river history code, street-split (e.g. X)")
     ap.add_argument("--history-spot", default="",
                     help="manual mode: node ordinal (1 = UTG first to act)")
     ap.add_argument("--preflop-actions", default="",
@@ -503,9 +636,14 @@ def main():
                     help="ignore already-archived captures and fetch live")
     ap.add_argument("--fast", action="store_true",
                     help="short waits and no human pauses (debugging)")
+    ap.add_argument("--pace", type=float, default=None,
+                    help="in-app pause scale in seconds for bulk sweeps "
+                         "(human-paced cadence; e.g. --pace 2.5)")
     ap.add_argument("--out", type=pathlib.Path,
                     help="write JSON here instead of the imports/solutions/ archive")
     args = ap.parse_args()
+    global PACE
+    PACE = args.pace
 
     cdp = Cdp(gtowizard_tab())
     cdp.send("Network.enable")
@@ -541,15 +679,55 @@ def main():
                          stacks, expected_position=opener,
                          expected_players=players, reuse=not args.refetch)
 
-        code = open_code(rfi)
+        code = raise_code(rfi, "open")
+        # defender walk: any seat after the opener (--bb-vs is BB for
+        # back-compat). The defend line is open + folds up to the seat's
+        # decision; the fetched node feeds --vs-3bet when it's the villain
+        defender = args.defender
         if args.bb_vs:
-            line = (folds + code + "-F" * (7 - n)).strip("-")
-            url = node_url(args.gametype, stacks, 8, line)
-            fetch_node(cdp, url,
-                       archive_path(args.gametype, token, "vs-open",
-                                    f"{slug(opener)}-bb"),
-                       stacks, expected_position="BB",
-                       expected_players=players, reuse=not args.refetch)
+            if defender:
+                die("--bb-vs and --defender are mutually exclusive")
+            defender = "BB"
+        defend_data = None
+        if defender:
+            d = ORDINAL[defender]
+            if d <= n:
+                die(f"defender {defender} must act after the opener {opener}")
+            defend_data = fetch_node(
+                cdp,
+                node_url(args.gametype, stacks, d,
+                         (folds + code + "-F" * (d - n - 1)).strip("-")),
+                archive_path(args.gametype, token, "vs-open",
+                             f"{slug(opener)}-{slug(defender)}"),
+                stacks, expected_position=defender,
+                expected_players=players, reuse=not args.refetch)
+
+        if args.vs_3bet:
+            # the 3-bet size is derived, never guessed: read the villain's
+            # raise code from their defend node, then fold back around to
+            # the opener's decision
+            v = ORDINAL[args.vs_3bet]
+            if v <= n:
+                die(f"--vs-3bet {args.vs_3bet} must act after the opener {opener}")
+            if defend_data is None:
+                defend_data = fetch_node(
+                    cdp,
+                    node_url(args.gametype, stacks, v,
+                             (folds + code + "-F" * (v - n - 1)).strip("-")),
+                    archive_path(args.gametype, token, "vs-open",
+                                 f"{slug(opener)}-{slug(args.vs_3bet)}"),
+                    stacks, expected_position=args.vs_3bet,
+                    expected_players=players, reuse=not args.refetch)
+            three = raise_code(defend_data, "3-bet")
+            line = (folds + code + "-F" * (v - n - 1) + "-" + three
+                    + "-F" * (8 - v)).strip("-")
+            fetch_node(
+                cdp,
+                node_url(args.gametype, stacks, 1 + len(line.split("-")), line),
+                archive_path(args.gametype, token, "vs-3bet",
+                             f"{slug(opener)}-{slug(args.vs_3bet)}"),
+                stacks, expected_position=opener,
+                expected_players=players, reuse=not args.refetch)
 
         if args.cbet:
             if not args.board:
@@ -569,15 +747,19 @@ def main():
     # ---- manual mode (params exactly as in the app's share URL) ------
     if args.history_spot:
         url = node_url(args.gametype, stacks, args.history_spot,
-                       args.preflop_actions, args.flop_actions, args.board)
+                       args.preflop_actions, args.flop_actions, args.board,
+                       args.turn_actions, args.river_actions)
         category, name, expected = manual_category(args.preflop_actions,
                                                    int(args.history_spot),
                                                    args.board, args.flop_actions,
                                                    players=players)
         if expected is None and category != "flops" and players == 8:
             expected = POSITIONS[int(args.history_spot) - 1]
+        # turn/river histories extend the archive name (street-split in the
+        # URL, dash-joined in the name)
+        suffix = "".join(f"-{t.lower()}" for t in (args.turn_actions, args.river_actions) if t)
         fetch_node(cdp, url,
-                   args.out or archive_path(args.gametype, token, category, name),
+                   args.out or archive_path(args.gametype, token, category, name + suffix),
                    stacks, expected_position=expected, expected_players=players,
                    board=args.board, reuse=not args.refetch, fast=args.fast)
         return

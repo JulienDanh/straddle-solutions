@@ -10,10 +10,9 @@ repo is its backup home. This directory is a nested git checkout of this repo.
 
 `transcripts/Simple Poker Systems/` and `transcripts/Bubble Mastery/` hold
 the source course transcripts (licensed training material); `extracted/`
-holds their structured .md extracts (28 files) and `flashcards.txt` the
-generated study deck. The public straddle repo renders the distilled study
-guide but carries none of this material; extraction reads the transcripts
-from here and writes the extracts here too.
+holds their structured .md extracts (28 files). The public straddle repo
+renders the distilled study guide but carries none of this material;
+extraction reads the transcripts from here and writes the extracts here too.
 
 ## Layout
 
