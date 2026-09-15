@@ -16,7 +16,9 @@ Output: one line per action per matching stack entry:
 With --json: {"<type>-<stack>bb-<action>": [1326 floats]} written to OUT.
 
 Combo:freq entries can be concrete combos (AsKd:0.5) — the weight lands
-on that combo only. Weights are rounded to 4 decimals.
+on that combo only — or hand classes (AKs:0.35, AA:1 — the BBZ store's
+format): the weight lands on every combo of the class. Weights are
+rounded to 4 decimals.
 """
 
 import argparse
@@ -30,6 +32,17 @@ sys.path.insert(0, HERE)
 from gw_order import combo_order  # noqa: E402 — 1326 combos, UPI order
 
 HANDS = combo_order()
+SUITS = "shdc"
+
+
+def combos_of_class(cls):
+    if len(cls) == 2:  # pair
+        return [cls[0] + a + cls[0] + b
+                for i, a in enumerate(SUITS) for b in SUITS[i + 1:]]
+    hi, lo, kind = cls[0], cls[1], cls[2]
+    if kind == "s":
+        return [hi + s + lo + s for s in SUITS]
+    return [hi + a + lo + b for a in SUITS for b in SUITS if a != b]
 
 
 def entry_upi_weights(actions):
@@ -48,11 +61,13 @@ def entry_upi_weights(actions):
                 f = float(freq)
             except ValueError:
                 continue
-            try:
-                idx = HANDS.index(combo)
-            except ValueError:
-                raise SystemExit(f"ERROR: combo {combo!r} not in UPI hand order")
-            weights[idx] = f
+            names = [combo] if len(combo) == 4 else combos_of_class(combo)
+            for name in names:
+                try:
+                    idx = HANDS.index(name)
+                except ValueError:
+                    raise SystemExit(f"ERROR: combo {name!r} not in UPI hand order")
+                weights[idx] = f
         out[action] = [round(w, 4) for w in weights]
     return out
 
